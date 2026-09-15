@@ -16,6 +16,7 @@
 - A valid update expires after exactly 120 seconds and falls back to `ready`, an empty agent name, and green.
 - All three LEDs blink together at 500 ms intervals whenever Wi-Fi is disconnected.
 - Wi-Fi credentials are sketch constants supplied at deployment time. Never commit real credentials.
+- Set the DHCP hostname to `AI-Agent-Indicator` before `WiFi.begin()` so compatible routers show that name; do not add mDNS or a `.local` address.
 - The HTTP API listens on port 80 without authentication and is intended only for a trusted LAN.
 - D1/GPIO5 drives red, D2/GPIO4 drives yellow, and D5/GPIO14 drives green through separate 330 Ω resistors; LEDs are active-high.
 - Runtime code remains in `ai-agent-indicator.ino`; ArduinoJson is the only additional firmware library.
@@ -39,7 +40,7 @@
 - Create: `tests/api_smoke.py`
 
 **Interfaces:**
-- Consumes: `POST /api/status` JSON with required `state: string` and optional `agent: string`; Wi-Fi SSID/password constants; `millis()`; ESP8266 Wi-Fi status.
+- Consumes: `POST /api/status` JSON with required `state: string` and optional `agent: string`; Wi-Fi SSID/password and DHCP-hostname constants; `millis()`; ESP8266 Wi-Fi status.
 - Produces: `GET /api/status`; `POST /api/status`; JSON fields `state`, `agent`, and `expires_in_seconds`; active-high output on D1/D2/D5; all-LED Wi-Fi fault blink.
 - Internal firmware interface: `AgentState`, `parseState()`, `stateName()`, `setCurrentState()`, `expireStatusIfNeeded()`, `expiresInSeconds()`, `renderLeds()`, `maintainWifi()`, `handleStatusPost()`, `handleStatusGet()`, `sendStatusResponse()`, and `sendJsonError()`.
 
@@ -181,6 +182,7 @@ At the top of `ai-agent-indicator.ino`, define the exact types, pins, limits, an
 
 const char* WIFI_SSID = "";
 const char* WIFI_PASSWORD = "";
+const char* DEVICE_HOSTNAME = "AI-Agent-Indicator";
 
 constexpr uint8_t RED_LED_PIN = D1;
 constexpr uint8_t YELLOW_LED_PIN = D2;
@@ -385,6 +387,9 @@ void setup() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  if (!WiFi.hostname(DEVICE_HOSTNAME)) {
+    Serial.println("Failed to set DHCP hostname");
+  }
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   lastWifiAttemptMs = millis();
 
@@ -425,7 +430,7 @@ Before sending any request, confirm the connected board shows solid green. Then 
 python3 tests/api_smoke.py --quick
 ```
 
-Expected: `API smoke test passed`. Afterward, use the four POST examples from the test one at a time, pausing after each request to confirm working is red, blocked and permission are yellow, and ready is green.
+Expected: `API smoke test passed`. Confirm the router's connected-client list identifies the board as `AI-Agent-Indicator`. Afterward, use the four POST examples from the test one at a time, pausing after each request to confirm working is red, blocked and permission are yellow, and ready is green.
 
 - [ ] **Step 10: Run the full timeout acceptance test**
 
@@ -494,6 +499,10 @@ Install the ESP8266 Arduino board package and ArduinoJson. Select
 upload the sketch, and open Serial Monitor at 115200 baud to read the URL.
 Do not commit real Wi-Fi credentials.
 
+The firmware advertises the DHCP hostname `AI-Agent-Indicator` so compatible
+routers show a recognizable client name. It does not provide mDNS or a
+`.local` URL; use the numeric IP address for API requests.
+
 ## API
 
 Send a status:
@@ -529,11 +538,11 @@ Replace line wrapping as needed, but retain every fact and command.
 
 - [ ] **Step 2: Review the README against the approved design**
 
-Read the rendered document and manually confirm it states all three pin/color mappings, 330 Ω resistors, all four API states, the 120-second fallback, last-writer-wins behavior, Wi-Fi fault blinking, local credential handling, the smoke-test command, and the trusted-LAN warning. Fix omissions or contradictions before continuing.
+Read the rendered document and manually confirm it states all three pin/color mappings, 330 Ω resistors, all four API states, the 120-second fallback, last-writer-wins behavior, Wi-Fi fault blinking, local credential handling, DHCP hostname `AI-Agent-Indicator`, the absence of mDNS/`.local` resolution, the smoke-test command, and the trusted-LAN warning. Fix omissions or contradictions before continuing.
 
 - [ ] **Step 3: Perform the Wi-Fi fault bench test**
 
-With the board showing a fresh `working` state, disable its access point or move it out of range. Confirm all three LEDs blink together rather than showing solid red. Restore Wi-Fi within 120 seconds and confirm red returns; repeat with an outage longer than 120 seconds and confirm green appears after reconnection. Finally, set `working`, reset the board, and confirm it forgets the previous state and shows green after reconnecting.
+With the board showing a fresh `working` state, disable its access point or move it out of range. Confirm all three LEDs blink together rather than showing solid red. Restore Wi-Fi within 120 seconds and confirm red returns; repeat with an outage longer than 120 seconds and confirm green appears after reconnection. Finally, set `working`, reset the board, and confirm it forgets the previous state, shows green after reconnecting, and reappears as `AI-Agent-Indicator` in the router client list.
 
 - [ ] **Step 4: Run final automated verification**
 
