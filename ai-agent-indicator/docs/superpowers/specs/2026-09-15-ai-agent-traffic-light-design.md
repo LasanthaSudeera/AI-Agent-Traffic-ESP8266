@@ -4,8 +4,8 @@
 
 Build a Wi-Fi-connected traffic light on a Wemos D1 Mini (ESP8266). AI agents or simple scripts set the light through a local HTTP API:
 
-- Red: an agent is blocked, stuck, or needs user permission.
-- Yellow: an agent is working.
+- Red: an agent is working.
+- Yellow: an agent is blocked, stuck, or needs user permission.
 - Green: the agent is ready or no fresh activity remains.
 
 Version 1 deliberately uses last-writer-wins behavior. The ESP8266 does not retain separate state for multiple agents. Per-agent tracking and aggregation are deferred to a later version.
@@ -71,9 +71,9 @@ All timing uses non-blocking `millis()` comparisons. The loop must continue serv
 
 | State | Display |
 |---|---|
-| `blocked` | Solid red |
-| `permission` | Solid red |
-| `working` | Solid yellow |
+| `blocked` | Solid yellow |
+| `permission` | Solid yellow |
+| `working` | Solid red |
 | `ready` | Solid green |
 
 `agent` is optional. When present, it must be a string no longer than 32 bytes. It is stored and reported for diagnostics and future compatibility, but it has no effect on version-one state selection.
@@ -132,7 +132,7 @@ Because the API is unauthenticated HTTP, it is intended only for a trusted local
 
 1. On startup, all LEDs blink during Wi-Fi connection; after connection, Serial prints the IP and green is solid.
 2. Each accepted state activates only its specified LED.
-3. Both `blocked` and `permission` activate red.
+3. Both `blocked` and `permission` activate yellow; `working` activates red.
 4. A newer valid update replaces the previous state, regardless of the optional agent name.
 5. Malformed JSON and invalid fields return HTTP 400 and leave the display and expiry unchanged.
 6. `GET /api/status` reports the displayed logical state, stored agent name, and correct remaining lifetime.
@@ -143,4 +143,4 @@ Because the API is unauthenticated HTTP, it is intended only for a trusted local
 
 ## Future Version
 
-A later version can make `agent` required and replace the single status record with a bounded per-agent registry. Each agent will then have its own state and expiry time, and the visible state will use the priority red over yellow over green. A local desktop bridge can later observe supported AI-agent tools and send heartbeats automatically without changing the physical wiring.
+A later version can make `agent` required and replace the single status record with a bounded per-agent registry. Each agent will then have its own state and expiry time, and the visible state will prioritize yellow (attention required) over red (working) over green (ready). A local desktop bridge can later observe supported AI-agent tools and send heartbeats automatically without changing the physical wiring.
