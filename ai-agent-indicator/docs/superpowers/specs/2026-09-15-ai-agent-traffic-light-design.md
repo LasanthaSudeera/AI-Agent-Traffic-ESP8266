@@ -17,6 +17,7 @@ Version 1 includes:
 - One Wemos D1 Mini.
 - Three discrete LEDs with current-limiting resistors.
 - Wi-Fi credentials stored as sketch constants.
+- DHCP hostname `AI-Agent-Indicator` for recognition in compatible router client lists.
 - A JSON HTTP API with no authentication.
 - A two-minute inactivity timeout.
 - Wi-Fi fault indication.
@@ -31,6 +32,7 @@ Version 1 excludes:
 - A Wi-Fi configuration portal.
 - Persistent status across reboot.
 - MQTT and cloud services.
+- mDNS and `.local` hostname resolution.
 
 ## Hardware
 
@@ -46,7 +48,7 @@ Required parts are one Wemos D1 Mini, one red LED, one yellow LED, one green LED
 
 ## Runtime Behavior
 
-At boot, the firmware configures all LED pins as outputs and begins connecting to Wi-Fi. All three LEDs blink together while Wi-Fi is unavailable. After connection, the board prints its DHCP-assigned IP address at 115200 baud and starts an HTTP server on port 80.
+At boot, the firmware configures all LED pins as outputs, sets the Wi-Fi DHCP hostname to `AI-Agent-Indicator`, and begins connecting to Wi-Fi. All three LEDs blink together while Wi-Fi is unavailable. After connection, the board prints its DHCP-assigned IP address at 115200 baud and starts an HTTP server on port 80. Compatible routers display `AI-Agent-Indicator` in their connected-client list; API clients continue using the numeric IP address.
 
 With no fresh status update, the logical state is `ready` and the green LED is lit. Every valid update replaces the current state and restarts the 120-second inactivity timer. When the timer expires, the state becomes `ready` and the stored agent name is cleared.
 
@@ -115,7 +117,7 @@ The project remains one Arduino sketch because the prototype is small. Its funct
 3. Status handling stores the current enum, optional agent name, update timestamp, and expiry behavior.
 4. LED control renders a solid logical state or the non-blocking Wi-Fi fault pattern.
 
-Configuration constants at the top of the sketch contain the SSID, password, three pins, 120-second timeout, and blink interval. `ESP8266WiFi` and `ESP8266WebServer` come from the ESP8266 Arduino core; `ArduinoJson` is the only additional library.
+Configuration constants at the top of the sketch contain the SSID, password, DHCP hostname, three pins, 120-second timeout, and blink interval. The firmware must set the hostname before starting the Wi-Fi connection. `ESP8266WiFi` and `ESP8266WebServer` come from the ESP8266 Arduino core; `ArduinoJson` is the only additional library.
 
 ## Error Handling
 
@@ -140,6 +142,7 @@ Because the API is unauthenticated HTTP, it is intended only for a trusted local
 8. Wi-Fi loss blinks all three LEDs; reconnection restores a still-fresh state or green if it expired.
 9. Unknown routes and unsupported methods return HTTP 404 and 405 respectively.
 10. The sketch compiles for a Wemos D1 Mini using the ESP8266 Arduino core and its documented ArduinoJson dependency.
+11. After reconnecting, a compatible router's client list identifies the board as `AI-Agent-Indicator`; the numeric-IP API remains available.
 
 ## Future Version
 
