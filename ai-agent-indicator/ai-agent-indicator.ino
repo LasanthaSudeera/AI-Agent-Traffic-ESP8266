@@ -5,6 +5,7 @@
 
 const char* WIFI_SSID = "";
 const char* WIFI_PASSWORD = "";
+const char* DEVICE_HOSTNAME = "AI-Agent-Indicator";
 
 constexpr uint8_t RED_LED_PIN = D1;
 constexpr uint8_t YELLOW_LED_PIN = D2;
@@ -183,6 +184,9 @@ void setup() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  if (!WiFi.hostname(DEVICE_HOSTNAME)) {
+    Serial.println("Failed to set DHCP hostname");
+  }
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   lastWifiAttemptMs = millis();
 
