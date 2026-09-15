@@ -19,6 +19,8 @@
 - The HTTP API listens on port 80 without authentication and is intended only for a trusted LAN.
 - D1/GPIO5 drives red, D2/GPIO4 drives yellow, and D5/GPIO14 drives green through separate 330 Ω resistors; LEDs are active-high.
 - Runtime code remains in `ai-agent-indicator.ino`; ArduinoJson is the only additional firmware library.
+- The user approved a strict-TDD exception for this hardware-only, single-sketch prototype. Verify behavior through compilation, black-box requests to the flashed board, and physical LED checks rather than extracting host-only production modules.
+- README prose receives a manual requirements review, not source-text grep tests.
 - Preserve unrelated worktree changes. The pre-plan change to `ai-agent-indicator.ino` is line-ending-only when viewed with `git diff --ignore-space-at-eol`; recheck before editing.
 - The current workspace has Python 3 but no `arduino-cli` on `PATH`. Automated compilation requires installing Arduino CLI and the ESP8266 core, or using Arduino IDE 2.x for the equivalent compile/upload checks.
 
@@ -51,7 +53,7 @@ git diff --ignore-space-at-eol -- ai-agent-indicator.ino
 
 Expected: no output. If substantive user code appears, stop and reconcile it before replacing the blink example.
 
-- [ ] **Step 2: Write the failing black-box acceptance test**
+- [ ] **Step 2: Write the black-box acceptance test before the firmware implementation**
 
 Create `tests/api_smoke.py` with this behavior and concrete request helpers:
 
@@ -167,17 +169,7 @@ python3 -m py_compile tests/api_smoke.py
 
 Expected: exit 0 with no output.
 
-- [ ] **Step 4: Run the acceptance test before implementing the API**
-
-Run the test against a deliberately unused local port:
-
-```bash
-python3 tests/api_smoke.py --base-url http://127.0.0.1:9 --quick
-```
-
-Expected: FAIL with connection refused, proving the black-box test cannot pass when the API is absent.
-
-- [ ] **Step 5: Replace the blink example with the firmware configuration and state model**
+- [ ] **Step 4: Replace the blink example with the firmware configuration and state model**
 
 At the top of `ai-agent-indicator.ino`, define the exact types, pins, limits, and state storage. Leave credentials empty in committed code; insert real values only in the local copy used for upload.
 
@@ -254,7 +246,7 @@ uint32_t expiresInSeconds(uint32_t now) {
 }
 ```
 
-- [ ] **Step 6: Implement deterministic LED rendering and non-blocking Wi-Fi recovery**
+- [ ] **Step 5: Implement deterministic LED rendering and non-blocking Wi-Fi recovery**
 
 Use one helper to prevent mixed solid states. `working` maps to red; both attention states map to yellow; `ready` maps to green. Wi-Fi disconnection overrides the logical state.
 
@@ -295,7 +287,7 @@ void maintainWifi(uint32_t now) {
 }
 ```
 
-- [ ] **Step 7: Implement JSON responses, validation, and routes**
+- [ ] **Step 6: Implement JSON responses, validation, and routes**
 
 Use `StaticJsonDocument` so memory use is bounded. Call `expireStatusIfNeeded(millis())` immediately before every status response.
 
@@ -378,7 +370,7 @@ void setupRoutes() {
 }
 ```
 
-- [ ] **Step 8: Assemble non-blocking setup and loop functions**
+- [ ] **Step 7: Assemble non-blocking setup and loop functions**
 
 Initialize LEDs LOW before networking. Do not add `delay()` calls.
 
@@ -410,7 +402,7 @@ void loop() {
 }
 ```
 
-- [ ] **Step 9: Configure the build toolchain and compile**
+- [ ] **Step 8: Configure the build toolchain and compile**
 
 If Arduino CLI is available, install the board core and sole additional library, then compile:
 
@@ -423,13 +415,11 @@ arduino-cli compile --fqbn esp8266:esp8266:d1_mini .
 
 Expected: all commands exit 0 and compilation reports program and global-variable memory usage. If Arduino CLI cannot be installed, perform the equivalent compile in Arduino IDE 2.x using board “LOLIN(WEMOS) D1 R2 & mini,” the ESP8266 board package, and ArduinoJson.
 
-- [ ] **Step 10: Upload with local credentials and run the quick API test**
+- [ ] **Step 9: Upload with local credentials and run the quick API test**
 
 Put the actual SSID and password into the two local constants and do not stage them. Run `arduino-cli board list`, copy the attached board's exact port, and pass it to `arduino-cli upload --fqbn esp8266:esp8266:d1_mini -p <port> .`; alternatively, upload through Arduino IDE. Read the device URL at 115200 baud. Here `<port>` is runtime hardware input, not a value to commit.
 
 Before sending any request, confirm the connected board shows solid green. Then run:
-
-Run:
 
 ```bash
 python3 tests/api_smoke.py --quick
@@ -437,7 +427,7 @@ python3 tests/api_smoke.py --quick
 
 Expected: `API smoke test passed`. Afterward, use the four POST examples from the test one at a time, pausing after each request to confirm working is red, blocked and permission are yellow, and ready is green.
 
-- [ ] **Step 11: Run the full timeout acceptance test**
+- [ ] **Step 10: Run the full timeout acceptance test**
 
 Run:
 
@@ -447,7 +437,7 @@ python3 tests/api_smoke.py
 
 Expected after roughly 121 seconds: `API smoke test passed`, with the LED returning from red to green during the wait.
 
-- [ ] **Step 12: Remove credentials, recompile, and commit Task 1**
+- [ ] **Step 11: Remove credentials, recompile, and commit Task 1**
 
 Restore both credential constants to empty strings, then run:
 
@@ -474,17 +464,7 @@ Expected: compile and Python syntax checks exit 0, `git diff --check` prints not
 - Consumes: Task 1 pin constants, accepted state names, `/api/status` contract, build FQBN, Serial baud rate, and smoke-test CLI.
 - Produces: exact wiring and setup procedure, copyable `curl` examples, trusted-LAN warning, and a complete operator verification checklist.
 
-- [ ] **Step 1: Write a documentation-content check that fails before README exists**
-
-Run:
-
-```bash
-test -f README.md && rg -qi 'D1.*red' README.md && rg -qi 'D2.*yellow' README.md && rg -qi 'D5.*green' README.md && rg -qi 'blocked.*yellow' README.md && rg -qi 'working.*red' README.md && rg -q '120' README.md && rg -qi 'trusted.*LAN' README.md
-```
-
-Expected: FAIL because `README.md` does not exist.
-
-- [ ] **Step 2: Create the project README**
+- [ ] **Step 1: Create the project README**
 
 Write `README.md` with these exact sections and facts:
 
@@ -547,21 +527,15 @@ a trusted LAN.
 
 Replace line wrapping as needed, but retain every fact and command.
 
-- [ ] **Step 3: Run the documentation-content check again**
+- [ ] **Step 2: Review the README against the approved design**
 
-Run:
+Read the rendered document and manually confirm it states all three pin/color mappings, 330 Ω resistors, all four API states, the 120-second fallback, last-writer-wins behavior, Wi-Fi fault blinking, local credential handling, the smoke-test command, and the trusted-LAN warning. Fix omissions or contradictions before continuing.
 
-```bash
-test -f README.md && rg -qi 'D1.*red' README.md && rg -qi 'D2.*yellow' README.md && rg -qi 'D5.*green' README.md && rg -qi 'blocked.*yellow' README.md && rg -qi 'working.*red' README.md && rg -q '120' README.md && rg -qi 'trusted.*LAN' README.md
-```
-
-Expected: exit 0 with no output.
-
-- [ ] **Step 4: Perform the Wi-Fi fault bench test**
+- [ ] **Step 3: Perform the Wi-Fi fault bench test**
 
 With the board showing a fresh `working` state, disable its access point or move it out of range. Confirm all three LEDs blink together rather than showing solid red. Restore Wi-Fi within 120 seconds and confirm red returns; repeat with an outage longer than 120 seconds and confirm green appears after reconnection. Finally, set `working`, reset the board, and confirm it forgets the previous state and shows green after reconnecting.
 
-- [ ] **Step 5: Run final automated verification**
+- [ ] **Step 4: Run final automated verification**
 
 With credentials removed from the committed sketch, run:
 
@@ -573,7 +547,7 @@ git diff --check -- ai-agent-indicator.ino tests/api_smoke.py README.md
 
 Expected: every command exits 0 and the diff check prints nothing. Then temporarily restore local credentials, upload, run `python3 tests/api_smoke.py`, confirm `API smoke test passed`, and remove the credentials again.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 5: Commit Task 2**
 
 Run:
 
