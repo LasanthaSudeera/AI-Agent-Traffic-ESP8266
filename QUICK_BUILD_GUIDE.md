@@ -23,7 +23,7 @@ The light returns to green after 120 seconds without an update. If all three LED
 | 1 | Data-capable Micro-USB cable | Needed to program and power the board. |
 | As needed | Solder | Electronics solder suitable for small circuit boards. |
 | As needed | Heat-shrink tubing or electrical tape | Insulates the LED and resistor connections. |
-| As needed | PETG or PLA filament | The supplied G-code was prepared for 1.75 mm PETG. |
+| As needed | PETG or PLA filament | The supplied Ender-3 V3 SE G-code was prepared for 1.75 mm PETG. |
 
 No separate power supply is needed for the basic build; power the Wemos through USB.
 
@@ -44,11 +44,11 @@ No separate power supply is needed for the basic build; power the Wemos through 
 - Firmware and API details: [`ai-agent-indicator/README.md`](ai-agent-indicator/README.md)
 - Printable body: [`freecad-case/Case-Body.stl`](freecad-case/Case-Body.stl)
 - Printable cover: [`freecad-case/Case-Cover.stl`](freecad-case/Case-Cover.stl)
-- Pre-sliced PETG body: [`freecad-case/Case-Body_PETG_52m30s.gcode`](freecad-case/Case-Body_PETG_52m30s.gcode)
-- Pre-sliced PETG cover: [`freecad-case/Case-Cover_PETG_12m40s.gcode`](freecad-case/Case-Cover_PETG_12m40s.gcode)
+- Ender-3 V3 SE pre-sliced PETG body: [`freecad-case/Case-Body_PETG_52m30s.gcode`](freecad-case/Case-Body_PETG_52m30s.gcode)
+- Ender-3 V3 SE pre-sliced PETG cover: [`freecad-case/Case-Cover_PETG_12m40s.gcode`](freecad-case/Case-Cover_PETG_12m40s.gcode)
 - Editable FreeCAD model: [`freecad-case/Case.FCStd`](freecad-case/Case.FCStd)
 
-The supplied G-code uses 1.75 mm PETG, 0.2 mm layers, a 245 °C nozzle, and an 85 °C bed. **G-code is printer-specific:** only use these files after confirming that the printer model, bed size, start commands, temperatures, and material are compatible. The safest option is to slice the two STL files for your own printer.
+The supplied G-code was generated in Creality Print for a **Creality Ender-3 V3 SE with a 0.4 mm nozzle** and an eSun PETG profile. It uses 1.75 mm PETG, 0.2 mm layers, a 245 °C nozzle, and an 85 °C bed. **G-code is printer-specific:** before printing, confirm that your machine is an Ender-3 V3 SE with the expected nozzle, bed, start commands, temperatures, and material. If anything differs, slice the two STL files using your own printer profile.
 
 ## Wiring
 
@@ -75,7 +75,7 @@ The resistor may be placed on either side of its LED as long as it remains in se
 
 ## Quick assembly
 
-1. **Print the enclosure.** Slice `Case-Body.stl` and `Case-Cover.stl` for your printer. The included PETG G-code takes approximately 53 minutes for the body and 13 minutes for the cover, but only use it with a compatible printer.
+1. **Print the enclosure.** For an Ender-3 V3 SE with a 0.4 mm nozzle and compatible PETG, you can use the supplied G-code after checking its settings. It takes approximately 53 minutes for the body and 13 minutes for the cover. For any other setup, slice `Case-Body.stl` and `Case-Cover.stl` with the correct printer and filament profile.
 
 2. **Dry-fit everything before soldering.** Check that the Wemos, USB opening, cover, and three 8 mm LEDs fit. Place the LEDs in traffic-light order: red, yellow, then green. Do not force an LED into an undersized or rough opening.
 
