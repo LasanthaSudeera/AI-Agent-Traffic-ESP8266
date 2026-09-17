@@ -51,6 +51,11 @@ optional agent name is limited to 32 bytes. The latest valid update wins.
 Run `python3 tests/api_smoke.py` and enter the URL printed in Serial Monitor.
 Use `--quick` to skip the 121-second expiry check.
 
+curl -fsS -X POST -H 'Content-Type: application/json' -d '{"state":"working","agent":"claude"}'    http://ai-agent-status.local/api/status
+curl -fsS -X POST -H 'Content-Type: application/json' -d '{"state":"blocked","agent":"claude"}'    http://ai-agent-status.local/api/status
+curl -fsS -X POST -H 'Content-Type: application/json' -d '{"state":"permission","agent":"claude"}' http://ai-agent-status.local/api/status
+curl -fsS -X POST -H 'Content-Type: application/json' -d '{"state":"ready","agent":"claude"}'      http://ai-agent-status.local/api/status
+
 ## Fault behavior and security
 
 All three LEDs blink together while Wi-Fi is disconnected. The device retries
