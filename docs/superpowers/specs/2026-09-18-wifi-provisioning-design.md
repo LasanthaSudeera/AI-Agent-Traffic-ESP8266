@@ -15,14 +15,20 @@ FreeCAD, STL, and G-code changes are excluded. The user will update the enclosur
 Use:
 
 - WiFiManager 2.0.17 for network scanning and the captive portal;
-- ESP_DoubleResetDetector 1.3.2 with LittleFS for the ten-second double-reset trigger;
+- a project-owned `DoubleResetTrigger` using the ESP8266 core's RTC user-memory API;
 - a small project-owned `WifiProvisioning` component to coordinate connection attempts, portal lifetime, configuration persistence, button input, and provisioning state.
 
-This was selected over a custom captive portal because it provides the standard network-selection flow with substantially less project-owned networking code. It was selected over a project-owned reset detector because the chosen library already supports ESP8266 and LittleFS.
-
-ESP_DoubleResetDetector is archived and read-only. The dependency will therefore be pinned to 1.3.2, isolated behind `WifiProvisioning`, and compiled and exercised against the project's ESP8266 core before release. Replacing it later must not affect the rest of the firmware.
+This was selected over a custom captive portal because it provides the standard network-selection flow with substantially less project-owned networking code. The small project-owned reset detector avoids relying on an archived or inactive library while using the ESP8266 core's supported RTC-memory interface directly.
 
 ## Component boundaries
+
+### `DoubleResetTrigger`
+
+This component depends only on the ESP8266 Arduino core. On any boot without an existing marker, it writes a project-specific 32-bit magic value to RTC user-memory block 64 and opens a ten-second reset window. A second boot that sees the marker clears it immediately and reports a double reset. If no second reset occurs, a non-blocking `process()` call clears the marker after ten seconds.
+
+RTC block 64 is reserved exclusively for this component. It is above the first 32 blocks that the ESP8266 core may use during OTA, and all reads and writes use the required four-byte alignment. Read or write failure is logged and treated as no double reset.
+
+The trigger is intended for pressing the board's reset button twice while the board remains powered. RTC memory may be lost on a full power cycle, so rapid unplug-and-replug sequences are not guaranteed to trigger setup. Automatic setup and the D6 button remain available as reliable fallbacks.
 
 ### `WifiProvisioning`
 
@@ -32,7 +38,7 @@ This component owns:
 - detecting whether Wi-Fi credentials already exist;
 - attempting station-mode connections;
 - starting, processing, and stopping WiFiManager's non-blocking portal;
-- detecting the double-reset trigger;
+- using `DoubleResetTrigger` to detect the manual reset sequence;
 - debouncing and timing the optional setup button;
 - exposing the current connectivity/provisioning state to the main sketch;
 - applying the configured DHCP hostname before station connection.
@@ -86,7 +92,7 @@ Either manual trigger opens the setup portal immediately, without waiting for th
 - reset the board twice within ten seconds; or
 - hold an optional momentary button connected between D6/GPIO12 and GND for three seconds.
 
-The button uses the ESP8266 internal pull-up and is debounced in software. A short press has no effect. Manual setup does not erase the current credentials.
+The button uses the ESP8266 internal pull-up and is debounced in software. A short press has no effect. Manual setup does not erase the current credentials. "Double reset" means pressing the board's reset button twice while it remains powered; it does not promise detection across full power removal.
 
 ### Captive portal
 
@@ -135,8 +141,9 @@ The 120-second agent-status expiry timer continues during setup and disconnectio
 - An invalid friendly name is rejected in the wizard with a correction message.
 - Failed Wi-Fi credentials keep the portal active until corrected or timed out.
 - A portal timeout preserves the prior working configuration.
-- A LittleFS mount or read failure uses the default name, logs the error, and still permits automatic or button-triggered provisioning. Double-reset detection is unavailable until LittleFS works again.
+- A LittleFS mount or read failure uses the default name, logs the error, and still permits every provisioning trigger; the RTC-based double-reset detector is independent of LittleFS.
 - A LittleFS write failure reports the problem over Serial; successfully connected Wi-Fi remains usable with the default name.
+- An RTC-memory read or write failure is logged and disables only that double-reset attempt; automatic setup and the D6 button continue to work.
 - The setup portal is stopped before the status API is started, preventing port conflicts.
 - Timing uses rollover-safe `millis()` arithmetic and contains no blocking five-minute delays.
 
@@ -146,11 +153,10 @@ The pinned build baseline is:
 
 - ESP8266 Arduino core 3.1.2;
 - WiFiManager 2.0.17;
-- ESP_DoubleResetDetector 1.3.2;
 - the existing ArduinoJson dependency;
 - LittleFS supplied by the ESP8266 core.
 
-ESP_DoubleResetDetector requires ESP8266 core 3.0.2 or newer. Because that library is archived, changing the pinned 3.1.2 core requires rerunning the compile and physical trigger checks before updating the documented baseline.
+No external double-reset library is required. Changing the pinned ESP8266 core requires rerunning the compile, RTC-memory, and physical trigger checks before updating the documented baseline.
 
 ## Verification
 
@@ -159,6 +165,7 @@ ESP_DoubleResetDetector requires ESP8266 core 3.0.2 or newer. Because that libra
 - Compile the firmware for `LOLIN(WEMOS) D1 R2 & mini` using the pinned library versions.
 - Run the existing API smoke test after the device is connected.
 - Confirm no real SSID or password is required in, or committed to, the sketch.
+- Confirm the build has no external reset-detector dependency.
 
 ### Physical acceptance checks
 
@@ -169,7 +176,7 @@ ESP_DoubleResetDetector requires ESP8266 core 3.0.2 or newer. Because that libra
 5. Leave Wi-Fi unavailable for five minutes and confirm the portal opens.
 6. Let the portal time out for five minutes and confirm it returns to the prior saved-network retry cycle.
 7. Enter invalid credentials and confirm they can be corrected without losing the prior working configuration.
-8. Confirm double reset within ten seconds opens setup.
+8. Confirm two reset-button presses within ten seconds open setup, while a second press after ten seconds does not.
 9. Confirm a three-second D6/GPIO12-to-GND button hold opens setup and a short press does not.
 10. Confirm setup, reconnection, and each agent-state LED pattern.
 11. Confirm the 120-second status expiry continues while setup or disconnection is active.
@@ -179,10 +186,10 @@ ESP_DoubleResetDetector requires ESP8266 core 3.0.2 or newer. Because that libra
 
 Update `QUICK_BUILD_GUIDE.md` and `ai-agent-indicator/README.md` to cover:
 
-- WiFiManager and ESP_DoubleResetDetector installation with pinned versions;
+- WiFiManager installation and the pinned ESP8266 core version;
 - first-time setup, network selection, hidden SSIDs, and friendly naming;
 - the two five-minute phases: connection grace and portal lifetime;
-- double-reset recovery;
+- reset-button double-reset recovery and its power-cycle limitation;
 - optional momentary-button wiring from D6/GPIO12 to GND;
 - setup, disconnected, and agent-state LED meanings;
 - the open-hotspot security warning;
