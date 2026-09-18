@@ -20,6 +20,8 @@ Use:
 
 This was selected over a custom captive portal because it provides the standard network-selection flow with substantially less project-owned networking code. The small project-owned reset detector avoids relying on an archived or inactive library while using the ESP8266 core's supported RTC-memory interface directly.
 
+WiFiManager is used without a project-owned fork or credential-backup layer. Its normal save behavior makes newly submitted Wi-Fi credentials persistent before connection success is known. Recovery from incorrect saved credentials uses the still-active portal, the automatic five-minute fallback, double reset, or the D6 button.
+
 ## Component boundaries
 
 ### `DoubleResetTrigger`
@@ -81,7 +83,7 @@ If saved credentials exist, the device attempts to connect for five minutes. Thi
 
 While disconnected, the device retries the saved network without blocking the main loop. If it remains disconnected for five continuous minutes, it opens the setup portal for five minutes.
 
-If the portal times out without a successful configuration, it closes and starts another five-minute saved-network connection cycle. Existing credentials and the friendly name remain unchanged.
+If the portal times out without a form submission, it closes and starts another five-minute saved-network connection cycle with the existing settings. If credentials were submitted, WiFiManager has already made them the saved credentials, so the next connection cycle uses the most recently submitted network.
 
 If no previous credentials exist, a timed-out portal stays closed for a five-minute cooldown while the disconnected LED pattern continues, then opens again. This prevents a brand-new device from broadcasting an open setup network indefinitely.
 
@@ -106,7 +108,7 @@ The portal:
 - asks for the Wi-Fi password and friendly device name;
 - shows a save confirmation before restarting after success.
 
-Candidate credentials and the candidate friendly name are staged in RAM. The last working Wi-Fi configuration is also held in RAM for the duration of the portal and must not be logged or exposed. Candidate values replace the saved values only after the candidate network connects successfully. A failed candidate keeps the portal available for correction. A portal timeout restores the prior configuration and resumes the saved-network connection cycle.
+WiFiManager handles credential submission with its standard persistence behavior. Submitting the form replaces the previously saved Wi-Fi credentials immediately, before connection success is known; the firmware does not maintain a separate backup. A failed connection keeps the portal available for correction. If the device restarts or the portal times out before correction, it retries the most recently submitted credentials, then automatically reopens setup after five disconnected minutes. Double reset or the D6 button can reopen setup immediately.
 
 The hotspot is intentionally open. Documentation must warn that anyone nearby can access setup during its five-minute window. No setup password or additional web authentication is included in this version.
 
@@ -140,7 +142,7 @@ The 120-second agent-status expiry timer continues during setup and disconnectio
 
 - An invalid friendly name is rejected in the wizard with a correction message.
 - Failed Wi-Fi credentials keep the portal active until corrected or timed out.
-- A portal timeout preserves the prior working configuration.
+- A portal timeout with no form submission preserves the existing configuration. After a submission, WiFiManager retains the most recently submitted credentials.
 - A LittleFS mount or read failure uses the default name, logs the error, and still permits every provisioning trigger; the RTC-based double-reset detector is independent of LittleFS.
 - A LittleFS write failure reports the problem over Serial; successfully connected Wi-Fi remains usable with the default name.
 - An RTC-memory read or write failure is logged and disables only that double-reset attempt; automatic setup and the D6 button continue to work.
@@ -174,9 +176,9 @@ No external double-reset library is required. Changing the pinned ESP8266 core r
 3. Save a valid network and friendly name, then confirm restart, DHCP hostname, API availability, and persistence over another power cycle.
 4. Restart the router and confirm the device retries for five minutes without losing settings or opening setup early.
 5. Leave Wi-Fi unavailable for five minutes and confirm the portal opens.
-6. Let the portal time out for five minutes and confirm it returns to the prior saved-network retry cycle.
-7. Enter invalid credentials and confirm they can be corrected without losing the prior working configuration.
-8. Confirm two reset-button presses within ten seconds open setup, while a second press after ten seconds does not.
+6. Let the portal time out for five minutes without submitting the form and confirm it returns to the existing saved-network retry cycle.
+7. Submit invalid credentials, confirm the portal stays open, then correct them and connect successfully.
+8. After saving unusable credentials and restarting, confirm two reset-button presses within ten seconds open setup, while a second press after ten seconds does not.
 9. Confirm a three-second D6/GPIO12-to-GND button hold opens setup and a short press does not.
 10. Confirm setup, reconnection, and each agent-state LED pattern.
 11. Confirm the 120-second status expiry continues while setup or disconnection is active.
@@ -194,6 +196,7 @@ Update `QUICK_BUILD_GUIDE.md` and `ai-agent-indicator/README.md` to cover:
 - setup, disconnected, and agent-state LED meanings;
 - the open-hotspot security warning;
 - recovery from a wrong password or unavailable router;
+- WiFiManager's immediate credential replacement behavior and the automatic, double-reset, and D6-button recovery paths;
 - removal of instructions to bake credentials into the sketch.
 
 The hook scripts and hook instructions retain their existing API contract and require no behavioral changes.
@@ -204,6 +207,6 @@ The hook scripts and hook instructions retain their existing API contract and re
 - Available 2.4 GHz networks are visible in the wizard, with a manual path for hidden networks.
 - Router outages up to five minutes do not trigger setup.
 - Automatic and manual setup entry both work.
-- Previous working credentials survive failed or abandoned setup.
+- Incorrect saved credentials can be corrected through the active portal, automatic fallback, double reset, or the D6 button.
 - The status API, agent hooks, expiry behavior, and LED mapping work unchanged after connection.
 - No Wi-Fi password appears in project settings, API responses, documentation examples, or committed firmware.
