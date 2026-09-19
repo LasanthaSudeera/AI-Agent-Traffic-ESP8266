@@ -12,7 +12,7 @@ This guide shows the quickest way to build the Wi-Fi status light using the Ardu
 
 ## How the indicator works
 
-1. **The ESP8266 connects to Wi-Fi.** While it is starting, disconnected, or reconnecting, all three LEDs blink together at half-second intervals. The device retries the Wi-Fi connection every 10 seconds.
+1. **The ESP8266 connects to Wi-Fi.** While it is disconnected or reconnecting outside setup, all three LEDs blink together at half-second intervals. The device retries the Wi-Fi connection every 10 seconds. During setup, the LEDs instead cycle red, yellow, then green at half-second intervals.
 
 2. **A steady status light means Wi-Fi is connected.** There is no separate Wi-Fi LED. Once connected, the three-LED blinking stops and one LED stays on to show the current agent state. The numeric device URL is also printed in Serial Monitor.
 
@@ -37,6 +37,7 @@ curl http://DEVICE_IP/api/status
 | 1 | Wemos D1 Mini ESP8266 board | A compatible D1 Mini clone is also suitable. |
 | 1 each | Red, yellow, and green 8 mm round LEDs | Standard low-current LEDs, preferably diffused. The case holes are 8.2 mm. |
 | 3 | 330 ohm, 1/4 W resistors | One resistor is required for each LED. |
+| 1 optional | Momentary normally-open push button | Connects D6/GPIO12 to GND for on-demand Wi-Fi setup. |
 | About 1 m | Thin insulated hookup wire | 22-26 AWG stranded wire is easy to arrange inside the case. |
 | 1 | Data-capable Micro-USB cable | Needed to program and power the board. |
 | As needed | Solder | Electronics solder suitable for small circuit boards. |
@@ -80,6 +81,7 @@ Each LED needs its own 330 ohm resistor.
 | Red | D1 | GPIO5 | D1 -> 330 ohm resistor -> LED anode (+) |
 | Yellow | D2 | GPIO4 | D2 -> 330 ohm resistor -> LED anode (+) |
 | Green | D5 | GPIO14 | D5 -> 330 ohm resistor -> LED anode (+) |
+| Optional setup button | D6 | GPIO12 | Momentary normally-open button from D6 to GND |
 
 Connect all three LED cathodes (-) to a `GND` pin on the Wemos.
 
@@ -90,9 +92,14 @@ D1 ---- 330 ohm ---- red LED anode
 D2 ---- 330 ohm ---- yellow LED anode
 D5 ---- 330 ohm ---- green LED anode
 GND ---------------- all three LED cathodes
+D6 ----------------- optional momentary button ---------------- GND
 ```
 
 The resistor may be placed on either side of its LED as long as it remains in series. Keep bare connections separated and insulated.
+
+Hold the optional setup button for three seconds to open the Wi-Fi wizard; a
+short press does nothing. The current enclosure has no guaranteed button
+opening. The user will update the enclosure design if this option is fitted.
 
 ## Quick assembly
 
@@ -104,9 +111,9 @@ The resistor may be placed on either side of its LED as long as it remains in se
 
 4. **Solder the circuit.** Connect each signal pin through its own 330 ohm resistor to the matching LED anode. Join all three cathodes to `GND`. Use heat-shrink tubing or electrical tape so exposed leads cannot touch.
 
-5. **Install Arduino support.** In Arduino IDE, install the ESP8266 board package and the `ArduinoJson` library. Select **LOLIN(WEMOS) D1 R2 & mini** and the correct USB port.
+5. **Install Arduino support.** In Arduino IDE, install **ESP8266 Arduino core 3.1.2**, **WiFiManager 2.0.17**, and **ArduinoJson 6.21.6**. Select **LOLIN(WEMOS) D1 R2 & mini** and the correct USB port.
 
-6. **Configure and upload the firmware.** Open `ai-agent-indicator/ai-agent-indicator.ino`, set `WIFI_SSID` and `WIFI_PASSWORD` for the local 2.4 GHz Wi-Fi network, and upload the sketch. Do not commit real Wi-Fi credentials to Git.
+6. **Upload and configure the firmware.** Open `ai-agent-indicator/ai-agent-indicator.ino` and upload the sketch. On first boot, join the open `AI-Agent-Light-Setup-XXXX` Wi-Fi network. Wait for the captive page, or browse to `http://192.168.4.1`. Select a scanned 2.4 GHz network or type a hidden SSID, enter its password and a friendly device name, then submit. The device saves the settings and restarts once; reconnect the computer or phone to the normal LAN.
 
 7. **Find the device address.** Open Serial Monitor at **115200 baud**. After connection, note the numeric URL printed as `http://DEVICE_IP`.
 
@@ -121,6 +128,28 @@ The resistor may be placed on either side of its LED as long as it remains in se
    The red LED should turn on. Repeat with `blocked` or `permission` for yellow and `ready` for green.
 
 9. **Finish the assembly.** Disconnect USB power, arrange the wires so the cover cannot pinch them, secure loose parts if necessary, and install the cover. Reconnect USB power and run the test once more.
+
+## Wi-Fi setup and recovery behavior
+
+Without saved credentials, setup opens immediately. With saved credentials,
+the device first tries to reconnect for five minutes while all LEDs blink
+together at 500 ms intervals. If it cannot connect, the open setup AP appears
+for five minutes and the LEDs cycle red → yellow → green at 500 ms per
+color. If setup expires without a working submission, the device returns to
+connection attempts and repeats this automatic cycle. Connected agent colors
+remain unchanged.
+
+Stock WiFiManager saves each submitted network immediately. A wrong password
+therefore replaces the previously saved credentials. Correct it before the
+active portal closes, wait five minutes for setup to return, press reset twice
+within ten seconds, or hold D6/GPIO12 to GND for three seconds. Waiting longer
+than ten seconds between resets does not count. Double-reset detection uses RTC
+memory and is not guaranteed across a power loss.
+
+The setup AP is intentionally open and unauthenticated, so nearby users can
+reach normal setup during its five-minute window. Hidden reboot,
+credential-erase, and OTA update routes are disabled, but normal setup remains
+available without authentication.
 
 ## Connect AI agents
 
@@ -244,8 +273,12 @@ Use an absolute script path in hook configuration. Run the non-`working` hook be
 | Problem | What to check |
 |---|---|
 | One LED does not light | Check its polarity, solder joints, 330 ohm resistor, and assigned Wemos pin. |
-| All LEDs blink together | Check the Wi-Fi name and password and confirm that a 2.4 GHz network is available. |
-| Firmware will not upload | Use a data-capable USB cable and verify the selected board, USB port, ESP8266 board package, and ArduinoJson library. |
+| All LEDs blink together | The device is in its five-minute router reconnect grace period. Check that the router and saved 2.4 GHz network are available; setup opens only after the grace period. |
+| Wrong Wi-Fi password was saved | While the portal is active, submit the corrected password. Otherwise wait for the automatic five-minute setup window, double reset within ten seconds, or hold D6/GPIO12 to GND for three seconds. |
+| Hidden Wi-Fi network is missing | Open the portal's Wi-Fi form and type the hidden 2.4 GHz SSID manually instead of selecting a scan result. |
+| Setup portal does not open automatically | While joined to `AI-Agent-Light-Setup-XXXX`, browse directly to `http://192.168.4.1`. |
+| Double reset does not open setup | Make sure both reset presses occur within ten seconds. Detection is not guaranteed if power is removed between resets; wait for automatic setup or use the D6 button. |
+| Firmware will not upload | Use a data-capable USB cable and verify the selected board, USB port, ESP8266 Arduino core 3.1.2, WiFiManager 2.0.17, and ArduinoJson 6.21.6. |
 | An LED does not fit | Remove print debris or lightly clean the opening. Do not force it. The holes are 8.2 mm for 8 mm LED bodies; resize and reprint from `Case.FCStd` if your LEDs differ. |
 | The API call fails | Use the numeric IP from Serial Monitor and make sure the computer and ESP8266 are on the same local network. |
 
