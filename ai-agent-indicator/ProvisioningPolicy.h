@@ -15,6 +15,7 @@ class ProvisioningPolicy {
   ProvisioningAction update(uint32_t now, bool wifiConnected,
                             bool portalActive, bool manualSetup);
   ProvisioningMode mode() const;
+  static bool portalExpired(uint32_t now, uint32_t startedAt, uint32_t lifetimeMs);
 
  private:
   uint32_t connectionGraceMs_;

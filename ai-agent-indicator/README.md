@@ -98,7 +98,10 @@ Use `--quick` to skip the 121-second expiry check.
 Before accepting provisioning on hardware, flash a board and record the result
 of every item in this checklist:
 
-1. Erase saved Wi-Fi and confirm first boot opens setup immediately.
+1. In Arduino IDE, select **Tools → Erase Flash → Sketch + WiFi Settings** and
+   upload the main firmware. Confirm first boot opens setup immediately, then
+   restore **Tools → Erase Flash → Only Sketch** for later uploads so they do
+   not erase saved Wi-Fi or LittleFS.
 2. Confirm nearby networks appear and a hidden SSID can be entered.
 3. Save valid Wi-Fi and a custom name; confirm one clean restart, no accidental
    return to setup, the DHCP hostname, API URL, and persistence across a power
@@ -117,20 +120,40 @@ of every item in this checklist:
    does nothing.
 10. Confirm setup cycles red/yellow/green, disconnection blinks all three, and
     connected API states show the existing colors.
-11. Post `working`, remain in setup or disconnected for over 120 seconds,
-    reconnect, and confirm green.
+11. Stop every automatic reporter/background refresher first (for the included
+    reporter, send `ready` and confirm its refresher has exited). Then post one
+    `working` update with a direct `curl`, not `traffic-light.sh`; remain in
+    setup or disconnected for over 120 seconds, reconnect, and confirm green.
 12. Corrupt `/config.json` with a disposable sketch, reflash the main firmware,
-    and confirm fallback to `AI-Agent-Indicator` without blocking setup. Use
-    this test-only sketch and do not commit it:
+    and confirm fallback to `AI-Agent-Indicator` without blocking setup. Keep
+    the same **Flash Size** filesystem layout for both uploads and keep **Erase
+    Flash → Only Sketch** selected so LittleFS survives. Use this test-only
+    sketch, confirm Serial Monitor prints `corrupt config written`, and do not
+    commit it:
 
     ```cpp
     #include <LittleFS.h>
 
     void setup() {
-      LittleFS.begin();
+      Serial.begin(115200);
+      LittleFS.setConfig(LittleFSConfig(false));
+      if (!LittleFS.begin()) {
+        Serial.println("LittleFS mount failed");
+        return;
+      }
       File file = LittleFS.open("/config.json", "w");
-      file.print("{\"schema\":999}");
+      if (!file || file.print("{\"schema\":999}") == 0) {
+        Serial.println("corrupt config write failed");
+        return;
+      }
       file.close();
+      File check = LittleFS.open("/config.json", "r");
+      if (check && check.readString() == "{\"schema\":999}") {
+        Serial.println("corrupt config written");
+      } else {
+        Serial.println("corrupt config verification failed");
+      }
+      check.close();
     }
 
     void loop() {}

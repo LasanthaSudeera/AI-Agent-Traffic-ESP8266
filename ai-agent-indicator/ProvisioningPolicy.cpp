@@ -67,3 +67,8 @@ ProvisioningAction ProvisioningPolicy::update(uint32_t now, bool wifiConnected,
 ProvisioningMode ProvisioningPolicy::mode() const {
   return mode_;
 }
+
+bool ProvisioningPolicy::portalExpired(uint32_t now, uint32_t startedAt,
+                                       uint32_t lifetimeMs) {
+  return static_cast<uint32_t>(now - startedAt) >= lifetimeMs;
+}

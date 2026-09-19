@@ -3,6 +3,7 @@
 #include <ESP8266WiFi.h>
 
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
@@ -51,14 +52,13 @@ void WifiProvisioning::process(uint32_t now) {
   const bool held = button_.update(digitalRead(buttonPin_) == LOW, now);
   const bool portalWasActive = isPortalActive();
   if (portalWasActive) {
-    // WiFiManager 2.0.17 uses an absolute deadline internally. Bound portal
-    // lifetime with elapsed time as well, including across millis() rollover.
-    if (static_cast<uint32_t>(now - portalStartedAt_) >= kPortalSeconds * 1000UL) {
+    // The library timeout is disabled; this is the only portal expiry clock.
+    if (ProvisioningPolicy::portalExpired(now, portalStartedAt_, kPortalSeconds * 1000UL)) {
       manager_.stopConfigPortal();
     } else {
       manager_.process();
       if (isPortalActive() &&
-          static_cast<uint32_t>(millis() - portalStartedAt_) >= kPortalSeconds * 1000UL) {
+          ProvisioningPolicy::portalExpired(millis(), portalStartedAt_, kPortalSeconds * 1000UL)) {
         manager_.stopConfigPortal();
       }
     }
@@ -100,7 +100,9 @@ void WifiProvisioning::configureManager() {
   if (managerConfigured_) return;
 
   manager_.setConfigPortalBlocking(false);
-  manager_.setConfigPortalTimeout(kPortalSeconds);
+  // WiFiManager 2.0.17 compares absolute deadlines, which can expire early
+  // across millis() rollover. process() owns the elapsed-time limit instead.
+  manager_.setConfigPortalTimeout(0);
   manager_.setWebPortalClientCheck(false);
   manager_.setAPClientCheck(false);
   manager_.setBreakAfterConfig(false);
@@ -118,6 +120,12 @@ void WifiProvisioning::configureManager() {
   manager_.setWebServerCallback([this] {
     // 2.0.17 invokes this before stock routes; ESP8266WebServer uses the first
     // matching handler. Hiding info buttons alone leaves these routes live.
+    manager_.server->on("/wifisave", HTTP_ANY, [this] {
+      if (validatePortalName()) manager_.saveWifiForm();
+    });
+    manager_.server->on("/paramsave", HTTP_ANY, [this] {
+      if (validatePortalName()) manager_.saveParameterForm();
+    });
     const auto unavailable = [this] {
       manager_.server->send(404, "text/plain", "Not found");
     };
@@ -159,14 +167,36 @@ void WifiProvisioning::startPortal() {
   manager_.startConfigPortal(apName_);
 }
 
-void WifiProvisioning::savePortalParameters() {
-  char friendly[DEVICE_NAME_CAPACITY] = {};
+bool WifiProvisioning::validatePortalName() {
+  // Match doParamSave()'s legacy param_0 precedence, but validate the complete
+  // request before WiFiManager truncates it to the 32-byte parameter buffer.
+  const String raw = manager_.server->hasArg("param_0")
+                         ? manager_.server->arg("param_0")
+                         : manager_.server->arg("device_name");
   char hostname[DEVICE_NAME_CAPACITY] = {};
-  if (!normalizeDeviceName(deviceNameParameter_.getValue(), friendly, hostname)) {
-    Serial.println(F("Invalid device name ignored"));
-    return;
+  if (raw.length() == std::strlen(raw.c_str()) &&
+      normalizeDeviceName(raw.c_str(), submittedFriendlyName_, hostname)) {
+    return true;
   }
-  if (!settings_.save(friendly)) {
+
+  manager_.server->sendHeader("Cache-Control", "no-store");
+  manager_.server->send(400, "text/html",
+      F("<!doctype html><html lang='en'><head><meta name='viewport' "
+        "content='width=device-width,initial-scale=1'><title>Correct device name</title>"
+        "</head><body><h1>Device name needs correction</h1>"
+        "<p>Use 1-32 ASCII letters, numbers, spaces, underscores, or hyphens "
+        "after trimming spaces. Include at least one letter or number.</p>"
+        "<p>Nothing was saved. Return to setup, correct the device name and "
+        "submit your Wi-Fi details again.</p><a href='/wifi'>Return to setup</a>"
+        "</body></html>"));
+  return false;
+}
+
+void WifiProvisioning::savePortalParameters() {
+  // Keep the validated, trimmed name even if the raw request had more than
+  // 32 bytes due to surrounding spaces; stock doParamSave() truncates first.
+  deviceNameParameter_.setValue(submittedFriendlyName_, 32);
+  if (!settings_.save(submittedFriendlyName_)) {
     Serial.println(F("Device settings save error"));
   }
 }

@@ -211,11 +211,27 @@ static void testProvisioningPolicy() {
   CHECK(rollover.update(299899U, false, false, false) == ProvisioningAction::OpenPortal);
 }
 
+static void testPortalExpiry() {
+  CHECK(!ProvisioningPolicy::portalExpired(100U, 100U, 300000U));
+  CHECK(!ProvisioningPolicy::portalExpired(300099U, 100U, 300000U));
+  CHECK(ProvisioningPolicy::portalExpired(300100U, 100U, 300000U));
+
+  // An absolute deadline wraps to 299899 here. That must not expire the
+  // portal immediately, or give it another five minutes after rollover.
+  CHECK(!ProvisioningPolicy::portalExpired(UINT32_MAX - 100U, UINT32_MAX - 100U, 300000U));
+  CHECK(!ProvisioningPolicy::portalExpired(UINT32_MAX, UINT32_MAX - 100U, 300000U));
+  CHECK(!ProvisioningPolicy::portalExpired(0U, UINT32_MAX - 100U, 300000U));
+  CHECK(!ProvisioningPolicy::portalExpired(299898U, UINT32_MAX - 100U, 300000U));
+  CHECK(ProvisioningPolicy::portalExpired(299899U, UINT32_MAX - 100U, 300000U));
+  CHECK(ProvisioningPolicy::portalExpired(299900U, UINT32_MAX - 100U, 300000U));
+}
+
 int main() {
   testDeviceNames();
   testHoldButton();
   testDoubleReset();
   testProvisioningPolicy();
+  testPortalExpiry();
   if (failures) return 1;
   std::cout << "provisioning unit tests passed\n";
   return 0;
