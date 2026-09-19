@@ -36,14 +36,51 @@ static void testDeviceNames() {
   CHECK(std::strcmp(friendly, "Desk_light--1") == 0);
   CHECK(std::strcmp(hostname, "Desk-light-1") == 0);
 
-  const char* invalidNames[] = {"", "___", "bad/name", "123456789012345678901234567890123"};
-  for (const char* input : invalidNames) {
-    std::strcpy(friendly, "not-empty");
-    std::strcpy(hostname, "not-empty");
-    CHECK(!normalizeDeviceName(input, friendly, hostname));
-    CHECK(friendly[0] == '\0');
-    CHECK(hostname[0] == '\0');
-  }
+  CHECK(normalizeDeviceName("12345678901234567890123456789012", friendly, hostname));
+  CHECK(std::strcmp(friendly, "12345678901234567890123456789012") == 0);
+  CHECK(std::strcmp(hostname, "12345678901234567890123456789012") == 0);
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName(nullptr, friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName("", friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName("   ", friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName("___", friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName("bad/name", friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName("Caf\xc3\xa9", friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
+
+  std::strcpy(friendly, "not-empty");
+  std::strcpy(hostname, "not-empty");
+  CHECK(!normalizeDeviceName("123456789012345678901234567890123", friendly, hostname));
+  CHECK(friendly[0] == '\0');
+  CHECK(hostname[0] == '\0');
 }
 
 static void testHoldButton() {
@@ -98,6 +135,23 @@ static void testDoubleReset() {
   DoubleResetTrigger writeFailure(fakeRead, fakeWrite, 10000U);
   CHECK(writeFailure.begin(0U) == DoubleResetStatus::StorageError);
   rtcWriteOk = true;
+
+  rtcValue = DoubleResetTrigger::kMarker;
+  rtcWriteOk = false;
+  DoubleResetTrigger detectedClearFailure(fakeRead, fakeWrite, 10000U);
+  CHECK(detectedClearFailure.begin(0U) == DoubleResetStatus::StorageError);
+  CHECK(rtcValue == DoubleResetTrigger::kMarker);
+  rtcWriteOk = true;
+
+  rtcValue = 0U;
+  DoubleResetTrigger timeoutRetry(fakeRead, fakeWrite, 10000U);
+  CHECK(timeoutRetry.begin(0U) == DoubleResetStatus::Armed);
+  rtcWriteOk = false;
+  CHECK(!timeoutRetry.process(10000U));
+  CHECK(rtcValue == DoubleResetTrigger::kMarker);
+  rtcWriteOk = true;
+  CHECK(timeoutRetry.process(10001U));
+  CHECK(rtcValue == 0U);
 
   rtcValue = 0U;
   DoubleResetTrigger disarmed(fakeRead, fakeWrite, 10000U);
