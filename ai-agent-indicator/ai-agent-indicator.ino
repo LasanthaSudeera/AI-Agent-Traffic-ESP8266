@@ -3,16 +3,14 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
 
-const char* WIFI_SSID = "";
-const char* WIFI_PASSWORD = "";
-const char* DEVICE_HOSTNAME = "AI-Agent-Indicator";
+#include "WifiProvisioning.h"
 
 constexpr uint8_t RED_LED_PIN = D1;
 constexpr uint8_t YELLOW_LED_PIN = D2;
 constexpr uint8_t GREEN_LED_PIN = D5;
+constexpr uint8_t SETUP_BUTTON_PIN = D6;
 constexpr uint32_t STATUS_TIMEOUT_MS = 120000UL;
 constexpr uint32_t WIFI_BLINK_INTERVAL_MS = 500UL;
-constexpr uint32_t WIFI_RETRY_INTERVAL_MS = 10000UL;
 constexpr size_t MAX_REQUEST_BYTES = 256;
 constexpr size_t MAX_AGENT_BYTES = 32;
 
@@ -23,9 +21,11 @@ AgentState currentState = AgentState::READY;
 char currentAgent[MAX_AGENT_BYTES + 1] = {};
 size_t currentAgentLength = 0;
 uint32_t lastValidUpdateMs = 0;
-uint32_t lastWifiAttemptMs = 0;
 bool hasFreshStatus = false;
-bool wasWifiConnected = false;
+bool apiServerRunning = false;
+
+void stopStatusServer();
+WifiProvisioning provisioning(SETUP_BUTTON_PIN, stopStatusServer);
 
 bool parseState(JsonString value, AgentState& parsed) {
   if (value == JsonString("ready")) parsed = AgentState::READY;
@@ -77,7 +77,12 @@ void writeLeds(bool red, bool yellow, bool green) {
 }
 
 void renderLeds(uint32_t now) {
-  if (WiFi.status() != WL_CONNECTED) {
+  if (provisioning.isPortalActive()) {
+    uint8_t phase = (now / WIFI_BLINK_INTERVAL_MS) % 3U;
+    writeLeds(phase == 0U, phase == 1U, phase == 2U);
+    return;
+  }
+  if (!provisioning.isConnected()) {
     bool on = ((now / WIFI_BLINK_INTERVAL_MS) % 2U) == 0U;
     writeLeds(on, on, on);
     return;
@@ -91,18 +96,23 @@ void renderLeds(uint32_t now) {
   }
 }
 
-void maintainWifi(uint32_t now) {
-  bool connected = WiFi.status() == WL_CONNECTED;
-  if (connected && !wasWifiConnected) {
+void stopStatusServer() {
+  if (!apiServerRunning) return;
+  server.stop();
+  apiServerRunning = false;
+}
+
+void syncStatusServer() {
+  if (provisioning.isPortalActive()) {
+    stopStatusServer();
+    return;
+  }
+  if (provisioning.isConnected() && !apiServerRunning) {
+    server.begin();
+    apiServerRunning = true;
     Serial.print("Connected. Device URL: http://");
     Serial.println(WiFi.localIP());
-  } else if (!connected &&
-             static_cast<uint32_t>(now - lastWifiAttemptMs) >= WIFI_RETRY_INTERVAL_MS) {
-    lastWifiAttemptMs = now;
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
-  wasWifiConnected = connected;
 }
 
 void sendJsonError(int code, const char* message) {
@@ -296,24 +306,18 @@ void setup() {
   writeLeds(false, false, false);
 
   Serial.begin(115200);
-  WiFi.persistent(false);
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  if (!WiFi.hostname(DEVICE_HOSTNAME)) {
-    Serial.println("Failed to set DHCP hostname");
-  }
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  lastWifiAttemptMs = millis();
-
   setupRoutes();
-  server.begin();
+  provisioning.begin(millis());
+  syncStatusServer();
 }
 
 void loop() {
   uint32_t now = millis();
-  maintainWifi(now);
+  provisioning.process(now);
+  syncStatusServer();
   expireStatusIfNeeded(now);
-  server.handleClient();
+  if (apiServerRunning) server.handleClient();
   renderLeds(now);
+  if (provisioning.shouldRestart()) ESP.restart();
   yield();
 }
