@@ -9,6 +9,7 @@ namespace {
 
 constexpr const char* kConfigPath = "/config.json";
 constexpr const char* kTemporaryConfigPath = "/config.tmp";
+constexpr const char* kBackupConfigPath = "/config.bak";
 
 }  // namespace
 
@@ -24,7 +25,13 @@ bool DeviceSettings::save(const char* friendlyName) {
   char newHostname[DEVICE_NAME_CAPACITY] = {};
   if (!normalizeDeviceName(friendlyName, newFriendlyName, newHostname) || !mounted_) return false;
 
-  LittleFS.remove(kTemporaryConfigPath);
+  if (LittleFS.exists(kTemporaryConfigPath) && !LittleFS.remove(kTemporaryConfigPath)) {
+    return false;
+  }
+  if (LittleFS.exists(kBackupConfigPath)) {
+    if (!LittleFS.exists(kConfigPath) || !LittleFS.remove(kBackupConfigPath)) return false;
+  }
+
   File file = LittleFS.open(kTemporaryConfigPath, "w");
   if (!file) {
     LittleFS.remove(kTemporaryConfigPath);
@@ -34,21 +41,27 @@ bool DeviceSettings::save(const char* friendlyName) {
   StaticJsonDocument<128> document;
   document["schema"] = kSchemaVersion;
   document["name"] = newFriendlyName;
+  size_t expected = measureJson(document);
+  file.clearWriteError();
   size_t written = serializeJson(document, file);
+  bool writeFailed = file.getWriteError() != 0;
   file.close();
-  if (written == 0U) {
+  if (written != expected || writeFailed) {
     LittleFS.remove(kTemporaryConfigPath);
     return false;
   }
 
-  if (LittleFS.exists(kConfigPath) && !LittleFS.remove(kConfigPath)) {
+  bool hadConfig = LittleFS.exists(kConfigPath);
+  if (hadConfig && !LittleFS.rename(kConfigPath, kBackupConfigPath)) {
     LittleFS.remove(kTemporaryConfigPath);
     return false;
   }
   if (!LittleFS.rename(kTemporaryConfigPath, kConfigPath)) {
+    if (hadConfig) LittleFS.rename(kBackupConfigPath, kConfigPath);
     LittleFS.remove(kTemporaryConfigPath);
     return false;
   }
+  if (hadConfig) LittleFS.remove(kBackupConfigPath);
 
   std::memcpy(friendlyName_, newFriendlyName, sizeof(friendlyName_));
   std::memcpy(hostname_, newHostname, sizeof(hostname_));
@@ -72,6 +85,10 @@ void DeviceSettings::useDefault() {
 }
 
 bool DeviceSettings::load() {
+  if (!LittleFS.exists(kConfigPath) && LittleFS.exists(kBackupConfigPath) &&
+      !LittleFS.rename(kBackupConfigPath, kConfigPath)) {
+    return false;
+  }
   if (!LittleFS.exists(kConfigPath)) return true;
 
   File file = LittleFS.open(kConfigPath, "r");
