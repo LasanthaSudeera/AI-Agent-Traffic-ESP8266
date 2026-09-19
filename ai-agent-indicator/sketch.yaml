@@ -1,0 +1,10 @@
+default_profile: d1_mini
+profiles:
+  d1_mini:
+    fqbn: esp8266:esp8266:d1_mini
+    platforms:
+      - platform: esp8266:esp8266 (3.1.2)
+        platform_index_url: https://arduino.esp8266.com/stable/package_esp8266com_index.json
+    libraries:
+      - WiFiManager (2.0.17)
+      - ArduinoJson (6.21.6)
